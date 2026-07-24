@@ -12,8 +12,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "MonitorOverlay",
-            path: "Sources/MonitorEnumerator"
+            name: "MonitorOverlay"
         )
     ]
 )

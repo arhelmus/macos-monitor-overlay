@@ -12,9 +12,9 @@ struct CLIOptions {
     var showHelp = false
 
     static let helpText = """
-    MonitorEnumerator — list displays and open borderless web overlays on them.
+    Monitor Overlay — list displays and open borderless web overlays on them.
 
-    Usage: MonitorEnumerator [options]
+    Usage: Monitor Overlay [options]
 
     Options:
       -m, --monitor <selector>   Auto-open an overlay on a monitor at launch.
@@ -30,9 +30,9 @@ struct CLIOptions {
       -h, --help                 Show this help and exit.
 
     Examples:
-      MonitorEnumerator --monitor 2 --no-auto-restore
-      MonitorEnumerator -m main -u https://apple.com
-      MonitorEnumerator --monitor uuid:37D8832A-2D66-02CA-B9F7-8F30A301B230
+      Monitor Overlay --monitor 2 --no-auto-restore
+      Monitor Overlay -m main -u https://apple.com
+      Monitor Overlay --monitor uuid:37D8832A-2D66-02CA-B9F7-8F30A301B230
     """
 
     static func parse(_ args: [String]) -> CLIOptions {

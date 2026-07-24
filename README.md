@@ -33,13 +33,13 @@ When `--monitor` resolves to a real display, the main window never appears.
 
 ```bash
 # Open apple.com full screen on display id 1 (scheme auto-added for bare hosts)
-swift run MonitorEnumerator --monitor id:1 --url apple.com
+swift run "Monitor Overlay" --monitor id:1 --url apple.com
 
 # Open on the second listed monitor, don't auto-restore on reconnect
-swift run MonitorEnumerator -m 2 --no-auto-restore
+swift run "Monitor Overlay" -m 2 --no-auto-restore
 
 # Just launch the picker window
-swift run MonitorEnumerator
+swift run "Monitor Overlay"
 ```
 
 ## Development
@@ -47,7 +47,7 @@ swift run MonitorEnumerator
 Requires macOS 13+ and a Swift 5.9+ toolchain (Xcode command-line tools).
 
 ```bash
-swift build          # build
-swift run MonitorEnumerator [options]   # build & run
-swift build -c release                   # release binary in .build/release/
+swift build                           # build
+swift run "Monitor Overlay" [options] # build & run
+swift build -c release                # release binary in .build/release/
 ```

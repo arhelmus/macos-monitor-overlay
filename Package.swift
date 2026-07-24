@@ -2,13 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "MonitorEnumerator",
+    name: "MonitorOverlay",
     platforms: [
         .macOS(.v13)
     ],
+    products: [
+        // The executable (and thus the process / menu-bar / Dock name).
+        .executable(name: "Monitor Overlay", targets: ["MonitorOverlay"])
+    ],
     targets: [
         .executableTarget(
-            name: "MonitorEnumerator",
+            name: "MonitorOverlay",
             path: "Sources/MonitorEnumerator"
         )
     ]

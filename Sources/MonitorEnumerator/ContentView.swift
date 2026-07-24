@@ -49,18 +49,18 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(monitors) { monitor in
-                            MonitorRow(
-                                monitor: monitor,
-                                isDeployed: manager.overlayUUIDs.contains(
-                                    DisplayIdentity.uuid(for: monitor.id) ?? ""),
-                                onOpen: {
-                                    WebWindowManager.shared.open(on: monitor)
-                                    MainWindowCoordinator.shared.hideForOverlay()
-                                },
-                                onClose: {
+                            let deployed = manager.overlayUUIDs.contains(
+                                DisplayIdentity.uuid(for: monitor.id) ?? "")
+                            Button {
+                                if deployed {
                                     WebWindowManager.shared.destroy(on: monitor)
+                                } else {
+                                    WebWindowManager.shared.open(on: monitor)
                                 }
-                            )
+                            } label: {
+                                MonitorRow(monitor: monitor, isDeployed: deployed)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(16)
@@ -104,45 +104,37 @@ struct ContentView: View {
 struct MonitorRow: View {
     let monitor: MonitorInfo
     let isDeployed: Bool
-    let onOpen: () -> Void
-    let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text(monitor.name)
-                    .font(.title3.weight(.semibold))
-                if monitor.isMain { badge("MAIN", tint: .accentColor) }
-                if isDeployed { badge("DEPLOYED", tint: .green) }
-                Spacer()
-                Text("ID \(String(monitor.id))")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: isDeployed ? "checkmark.square.fill" : "square")
+                .font(.title2)
+                .foregroundStyle(isDeployed ? Color.green : Color.secondary)
 
-            HStack(spacing: 24) {
-                specColumn("Resolution", "\(Int(monitor.pixelSize.width)) × \(Int(monitor.pixelSize.height)) px")
-                specColumn("Points", "\(Int(monitor.pointSize.width)) × \(Int(monitor.pointSize.height)) pt")
-                specColumn("Scale", "\(monitor.scaleFactor)×")
-                specColumn("Refresh", monitor.refreshRate.map { String(format: "%.0f Hz", $0) } ?? "—")
-            }
-
-            HStack {
-                specColumn("Position", "(\(Int(monitor.frame.origin.x)), \(Int(monitor.frame.origin.y)))")
-                Spacer()
-                if isDeployed {
-                    Button(role: .destructive, action: onClose) {
-                        Label("Close overlay", systemImage: "xmark.circle.fill")
-                    }
-                } else {
-                    Button(action: onOpen) {
-                        Label("Open full screen", systemImage: "arrow.up.right.square")
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(monitor.name)
+                        .font(.title3.weight(.semibold))
+                    if monitor.isMain { badge("MAIN", tint: .accentColor) }
+                    Spacer()
+                    Text("ID \(String(monitor.id))")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
                 }
+
+                HStack(spacing: 24) {
+                    specColumn("Resolution", "\(Int(monitor.pixelSize.width)) × \(Int(monitor.pixelSize.height)) px")
+                    specColumn("Points", "\(Int(monitor.pointSize.width)) × \(Int(monitor.pointSize.height)) pt")
+                    specColumn("Scale", "\(monitor.scaleFactor)×")
+                    specColumn("Refresh", monitor.refreshRate.map { String(format: "%.0f Hz", $0) } ?? "—")
+                }
+
+                specColumn("Position", "(\(Int(monitor.frame.origin.x)), \(Int(monitor.frame.origin.y)))")
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(

@@ -78,9 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// available, even while the overlay is deployed and the main window hidden.
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(
-            systemSymbolName: "display",
-            accessibilityDescription: "Monitor Overlay")
+        let glyph = NSImage(systemSymbolName: "display", accessibilityDescription: "Monitor Overlay")
+        glyph?.isTemplate = true
+        item.button?.image = glyph
 
         let menu = NSMenu()
         let settings = menu.addItem(withTitle: "Settings…",

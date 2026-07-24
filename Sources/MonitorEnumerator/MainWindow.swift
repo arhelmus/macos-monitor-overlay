@@ -7,10 +7,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     init() {
         let hosting = NSHostingController(rootView: ContentView())
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Monitors"
+        window.title = "Monitor Overlay Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.setContentSize(NSSize(width: 560, height: 500))
         window.contentMinSize = NSSize(width: 520, height: 420)
+        // Float above everything — including the overlay, which sits at the
+        // shielding level — so Settings is always reachable.
+        window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
+        window.collectionBehavior.insert(.canJoinAllSpaces)
         window.center()
         // Keep the window alive across close so it can be reopened from the menu.
         window.isReleasedWhenClosed = false
@@ -32,8 +36,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// Show the window and make the app a regular foreground app (Dock icon + menu bar).
     func show() {
         NSApp.setActivationPolicy(.regular)
+        // The Dock tile only exists once we're .regular — set the icon now, and
+        // again on the next runloop tick so the Dock reliably picks it up.
+        NSApp.applicationIconImage = AppIcon.dockImage()
+        NSApp.mainMenu?.items.first?.title = "Monitor Overlay"
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async {
+            NSApp.applicationIconImage = AppIcon.dockImage()
+        }
     }
 
     /// Hide the window and drop the Dock icon / menu-bar presence.

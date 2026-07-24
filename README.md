@@ -1,5 +1,7 @@
 # macos-monitor-overlay
 
+![Monitor Overlay](https://github.com/arhelmus/macos-monitor-overlay/blob/main/assets/example.png?raw=true)
+
 A tiny native macOS app that opens a borderless, edge-to-edge web view on a specific
 physical monitor — covering the menu bar and Dock — and keeps it pinned there.
 

@@ -9,5 +9,6 @@ enum Persistence {
         static let autoRestore = "autoRestoreOnReconnect"
         static let overlayURL = "overlayURLString"
         static let desiredUUIDs = "deployedDisplayUUIDs"
+        static let webZoom = "webZoom"
     }
 }

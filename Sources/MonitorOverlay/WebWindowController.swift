@@ -37,6 +37,14 @@ final class OverlaySettings: ObservableObject {
         didSet { Persistence.defaults.set(overlayURLString, forKey: Persistence.Key.overlayURL) }
     }
 
+    /// Page zoom applied inside the overlay web view (1.0 = 100%).
+    @Published var webZoom: Double {
+        didSet { Persistence.defaults.set(webZoom, forKey: Persistence.Key.webZoom) }
+    }
+
+    /// Selectable zoom levels shown in the settings segmented control (5 segments).
+    static let zoomLevels: [Double] = [0.5, 0.75, 1.0, 1.5, 2.0]
+
     /// The parsed, scheme-normalized URL to open (falls back to the default).
     var overlayURL: URL {
         OverlaySettings.normalizedURL(from: overlayURLString) ?? OverlaySettings.defaultURL
@@ -55,6 +63,8 @@ final class OverlaySettings: ObservableObject {
         autoRestoreOnReconnect = (defaults.object(forKey: Persistence.Key.autoRestore) as? Bool) ?? true
         overlayURLString = defaults.string(forKey: Persistence.Key.overlayURL)
             ?? OverlaySettings.defaultURL.absoluteString
+        let savedZoom = defaults.object(forKey: Persistence.Key.webZoom) as? Double
+        webZoom = savedZoom ?? 1.0
     }
 }
 
@@ -91,6 +101,7 @@ final class WebWindowController: NSWindowController, NSWindowDelegate {
 
         let webView = WKWebView(frame: screen.frame)
         webView.autoresizingMask = [.width, .height]
+        webView.pageZoom = OverlaySettings.shared.webZoom
         self.webView = webView
 
         let window = BorderlessWindow(
@@ -125,6 +136,11 @@ final class WebWindowController: NSWindowController, NSWindowDelegate {
     /// Navigate the overlay's web view to a new address.
     func load(_ url: URL) {
         webView.load(URLRequest(url: url))
+    }
+
+    /// Set the page zoom (1.0 = 100%).
+    func setZoom(_ zoom: Double) {
+        webView.pageZoom = zoom
     }
 
     /// Show the borderless window edge-to-edge on its target display.
@@ -262,6 +278,13 @@ final class WebWindowManager: ObservableObject {
         desiredUUIDs.remove(uuid)
         publish()
         intent.controller?.close()
+    }
+
+    /// Apply a page-zoom level to every deployed overlay live.
+    func applyZoom(_ zoom: Double) {
+        for intent in intents.values {
+            intent.controller?.setZoom(zoom)
+        }
     }
 
     /// Point every deployed overlay at a new URL and reload it live.

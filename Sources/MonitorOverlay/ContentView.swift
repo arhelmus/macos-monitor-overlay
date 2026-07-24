@@ -23,6 +23,24 @@ struct ContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
 
+            HStack(spacing: 8) {
+                Image(systemName: "textformat.size")
+                    .foregroundStyle(.secondary)
+                Picker("Zoom", selection: $settings.webZoom) {
+                    ForEach(OverlaySettings.zoomLevels, id: \.self) { level in
+                        Text("\(Int(level * 100))%").tag(level)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .help("Page zoom applied inside the overlay web view")
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+            .onChange(of: settings.webZoom) { newValue in
+                WebWindowManager.shared.applyZoom(newValue)
+            }
+
             Toggle(isOn: $settings.autoRestoreOnReconnect) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Auto-restore on reconnect")

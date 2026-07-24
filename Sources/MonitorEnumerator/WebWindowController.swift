@@ -28,10 +28,14 @@ final class OverlaySettings: ObservableObject {
 
     /// When true: a disconnect hides the overlay and it auto-restores on reconnect.
     /// When false: a disconnect fully closes the overlay (no auto-restore).
-    @Published var autoRestoreOnReconnect: Bool = true
+    @Published var autoRestoreOnReconnect: Bool {
+        didSet { Persistence.defaults.set(autoRestoreOnReconnect, forKey: Persistence.Key.autoRestore) }
+    }
 
     /// The address opened in new overlays (raw text as typed / passed on the CLI).
-    @Published var overlayURLString: String = OverlaySettings.defaultURL.absoluteString
+    @Published var overlayURLString: String {
+        didSet { Persistence.defaults.set(overlayURLString, forKey: Persistence.Key.overlayURL) }
+    }
 
     /// The parsed, scheme-normalized URL to open (falls back to the default).
     var overlayURL: URL {
@@ -46,7 +50,12 @@ final class OverlaySettings: ObservableObject {
         return URL(string: "https://" + trimmed)
     }
 
-    private init() {}
+    private init() {
+        let defaults = Persistence.defaults
+        autoRestoreOnReconnect = (defaults.object(forKey: Persistence.Key.autoRestore) as? Bool) ?? true
+        overlayURLString = defaults.string(forKey: Persistence.Key.overlayURL)
+            ?? OverlaySettings.defaultURL.absoluteString
+    }
 }
 
 // MARK: - Borderless window
@@ -175,13 +184,44 @@ final class WebWindowManager: ObservableObject {
 
     private var intents: [String: OverlayIntent] = [:] // keyed by stable display UUID
     private var wired = false
+    /// Set during app termination so window teardown doesn't clear the persisted
+    /// selection (closing overlays on quit must NOT count as user "un-deploying").
+    private var isQuitting = false
 
-    private init() {}
+    /// User's persisted selection of displays that should have an overlay. Only
+    /// changed by explicit user actions (open/destroy/close) — NOT by disconnects
+    /// — so a monitor that's off at launch stays remembered for next time.
+    private var desiredUUIDs: Set<String> {
+        didSet {
+            Persistence.defaults.set(Array(desiredUUIDs), forKey: Persistence.Key.desiredUUIDs)
+        }
+    }
+
+    private init() {
+        desiredUUIDs = Set(Persistence.defaults.stringArray(forKey: Persistence.Key.desiredUUIDs) ?? [])
+    }
 
     /// Is an overlay deployed on this monitor's physical display?
     func hasOverlay(on monitor: MonitorInfo) -> Bool {
         guard let uuid = DisplayIdentity.uuid(for: monitor.id) else { return false }
         return intents[uuid] != nil
+    }
+
+    /// Re-deploy overlays that were active in a previous run, for any of those
+    /// displays currently connected. Call once at launch after enumerating.
+    func restorePersisted(using monitors: [MonitorInfo]) {
+        guard !desiredUUIDs.isEmpty else { return }
+        for monitor in monitors {
+            if let uuid = DisplayIdentity.uuid(for: monitor.id), desiredUUIDs.contains(uuid) {
+                open(on: monitor)
+            }
+        }
+    }
+
+    /// Call right before terminating so the persisted selection is preserved
+    /// through window teardown.
+    func prepareForQuit() {
+        isQuitting = true
     }
 
     private func publish() {
@@ -208,6 +248,7 @@ final class WebWindowManager: ObservableObject {
         let targetURL = url ?? OverlaySettings.shared.overlayURL
         let controller = WebWindowController(screen: screen, displayUUID: uuid, url: targetURL)
         intents[uuid] = OverlayIntent(uuid: uuid, url: targetURL, controller: controller, displayID: monitor.id)
+        desiredUUIDs.insert(uuid)
         publish()
         controller.present()
     }
@@ -218,6 +259,7 @@ final class WebWindowManager: ObservableObject {
     func destroy(on monitor: MonitorInfo) {
         guard let uuid = DisplayIdentity.uuid(for: monitor.id),
               let intent = intents.removeValue(forKey: uuid) else { return }
+        desiredUUIDs.remove(uuid)
         publish()
         intent.controller?.close()
     }
@@ -234,6 +276,9 @@ final class WebWindowManager: ObservableObject {
     /// hidden it for a disconnect), it's a genuine user close → forget it.
     /// Otherwise the display went away → keep the intent so we can restore it.
     func windowClosed(uuid: String) {
+        // During quit, windows close as part of teardown — don't touch the
+        // persisted selection or trigger lifecycle transitions.
+        guard !isQuitting else { return }
         guard let intent = intents[uuid] else { return }
         let displayGone = NSScreen.screen(forUUID: uuid) == nil
 
@@ -244,8 +289,9 @@ final class WebWindowManager: ObservableObject {
             return
         }
 
-        // Genuine user close (Esc): hand control back to the coordinator.
+        // Genuine user close (Esc): forget it, and stop remembering the selection.
         intents[uuid] = nil
+        desiredUUIDs.remove(uuid)
         publish()
         if intents.isEmpty {
             MainWindowCoordinator.shared.overlaysDidFinish()

@@ -74,8 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    /// A menu-bar status item whose only action is Quit — the always-available
-    /// way to quit even while the overlay is hidden (monitor off).
+    /// Menu-bar status item: open the main window (Settings) or quit. Always
+    /// available, even while the overlay is deployed and the main window hidden.
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(
@@ -83,10 +83,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityDescription: "Monitor Overlay")
 
         let menu = NSMenu()
+        let settings = menu.addItem(withTitle: "Settings…",
+                                    action: #selector(openSettings),
+                                    keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Monitor Overlay",
                      action: #selector(NSApplication.terminate(_:)),
                      keyEquivalent: "q")
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func openSettings() {
+        MainWindowCoordinator.shared.showMainWindow()
     }
 }

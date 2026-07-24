@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var monitors: [MonitorInfo] = MonitorInfo.all()
     @ObservedObject private var settings = OverlaySettings.shared
+    @ObservedObject private var manager = WebWindowManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -14,6 +15,10 @@ struct ContentView: View {
                 TextField("https://example.com", text: $settings.overlayURLString)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled(true)
+                    .onSubmit(applyURL)
+                Button("Apply", action: applyURL)
+                    .disabled(manager.overlayUUIDs.isEmpty)
+                    .help("Reload all deployed overlays with this URL")
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
@@ -44,13 +49,18 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(monitors) { monitor in
-                            Button {
-                                WebWindowManager.shared.open(on: monitor)
-                                MainWindowCoordinator.shared.hideForOverlay()
-                            } label: {
-                                MonitorRow(monitor: monitor)
-                            }
-                            .buttonStyle(.plain)
+                            MonitorRow(
+                                monitor: monitor,
+                                isDeployed: manager.overlayUUIDs.contains(
+                                    DisplayIdentity.uuid(for: monitor.id) ?? ""),
+                                onOpen: {
+                                    WebWindowManager.shared.open(on: monitor)
+                                    MainWindowCoordinator.shared.hideForOverlay()
+                                },
+                                onClose: {
+                                    WebWindowManager.shared.destroy(on: monitor)
+                                }
+                            )
                         }
                     }
                     .padding(16)
@@ -62,6 +72,10 @@ struct ContentView: View {
         ) { _ in
             monitors = MonitorInfo.all()
         }
+    }
+
+    private func applyURL() {
+        WebWindowManager.shared.reload(url: settings.overlayURL)
     }
 
     private var header: some View {
@@ -89,21 +103,17 @@ struct ContentView: View {
 
 struct MonitorRow: View {
     let monitor: MonitorInfo
+    let isDeployed: Bool
+    let onOpen: () -> Void
+    let onClose: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(monitor.name)
                     .font(.title3.weight(.semibold))
-                if monitor.isMain {
-                    Text("MAIN")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.2))
-                        .foregroundStyle(.tint)
-                        .clipShape(Capsule())
-                }
+                if monitor.isMain { badge("MAIN", tint: .accentColor) }
+                if isDeployed { badge("DEPLOYED", tint: .green) }
                 Spacer()
                 Text("ID \(String(monitor.id))")
                     .font(.caption.monospaced())
@@ -120,9 +130,15 @@ struct MonitorRow: View {
             HStack {
                 specColumn("Position", "(\(Int(monitor.frame.origin.x)), \(Int(monitor.frame.origin.y)))")
                 Spacer()
-                Label("Open full screen", systemImage: "arrow.up.right.square")
-                    .font(.caption)
-                    .foregroundStyle(.tint)
+                if isDeployed {
+                    Button(role: .destructive, action: onClose) {
+                        Label("Close overlay", systemImage: "xmark.circle.fill")
+                    }
+                } else {
+                    Button(action: onOpen) {
+                        Label("Open full screen", systemImage: "arrow.up.right.square")
+                    }
+                }
             }
         }
         .padding(14)
@@ -131,8 +147,18 @@ struct MonitorRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary.opacity(0.08))
+                .strokeBorder(isDeployed ? Color.green.opacity(0.5) : Color.primary.opacity(0.08))
         )
+    }
+
+    private func badge(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.2))
+            .foregroundStyle(tint)
+            .clipShape(Capsule())
     }
 
     private func specColumn(_ label: String, _ value: String) -> some View {
@@ -147,5 +173,6 @@ struct MonitorRow: View {
 }
 
 #Preview {
-    ContentView()
+    ContentView(
+    )
 }

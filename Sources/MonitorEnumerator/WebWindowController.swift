@@ -75,14 +75,14 @@ final class BorderlessWindow: NSWindow {
 final class WebWindowController: NSWindowController, NSWindowDelegate {
     /// Stable identity of the display this overlay is pinned to.
     let displayUUID: String
-    private let url: URL
+    private let webView: WKWebView
 
     init(screen: NSScreen, displayUUID: String, url: URL) {
         self.displayUUID = displayUUID
-        self.url = url
 
         let webView = WKWebView(frame: screen.frame)
         webView.autoresizingMask = [.width, .height]
+        self.webView = webView
 
         let window = BorderlessWindow(
             contentRect: screen.frame,
@@ -113,6 +113,11 @@ final class WebWindowController: NSWindowController, NSWindowDelegate {
         window?.setFrame(screen.frame, display: true)
     }
 
+    /// Navigate the overlay's web view to a new address.
+    func load(_ url: URL) {
+        webView.load(URLRequest(url: url))
+    }
+
     /// Show the borderless window edge-to-edge on its target display.
     func present() {
         guard let window else { return }
@@ -138,7 +143,7 @@ final class WebWindowController: NSWindowController, NSWindowDelegate {
 /// One overlay intent per pinned physical display.
 private final class OverlayIntent {
     let uuid: String
-    let url: URL
+    var url: URL
     /// nil while the display is gone (the window may have been torn down by the OS).
     var controller: WebWindowController?
     /// Last known live display ID for this UUID (for fast removeFlag matching).
@@ -161,13 +166,27 @@ private let reconfigurationCallback: CGDisplayReconfigurationCallBack = { displa
     }
 }
 
-final class WebWindowManager {
+final class WebWindowManager: ObservableObject {
     static let shared = WebWindowManager()
+
+    /// UUIDs of displays that currently have a deployed overlay (visible or
+    /// hidden-while-disconnected). Drives the main window's UI.
+    @Published private(set) var overlayUUIDs: Set<String> = []
 
     private var intents: [String: OverlayIntent] = [:] // keyed by stable display UUID
     private var wired = false
 
     private init() {}
+
+    /// Is an overlay deployed on this monitor's physical display?
+    func hasOverlay(on monitor: MonitorInfo) -> Bool {
+        guard let uuid = DisplayIdentity.uuid(for: monitor.id) else { return false }
+        return intents[uuid] != nil
+    }
+
+    private func publish() {
+        overlayUUIDs = Set(intents.keys)
+    }
 
     /// Open (or focus) a borderless full-screen web window pinned to the given
     /// monitor. Passing nil uses the URL currently set in `OverlaySettings`.
@@ -189,7 +208,26 @@ final class WebWindowManager {
         let targetURL = url ?? OverlaySettings.shared.overlayURL
         let controller = WebWindowController(screen: screen, displayUUID: uuid, url: targetURL)
         intents[uuid] = OverlayIntent(uuid: uuid, url: targetURL, controller: controller, displayID: monitor.id)
+        publish()
         controller.present()
+    }
+
+    /// Destroy the overlay on this monitor from the main window (no lifecycle
+    /// hand-off — the main window is already in front). Removing the intent first
+    /// makes the ensuing `windowClosed` a no-op.
+    func destroy(on monitor: MonitorInfo) {
+        guard let uuid = DisplayIdentity.uuid(for: monitor.id),
+              let intent = intents.removeValue(forKey: uuid) else { return }
+        publish()
+        intent.controller?.close()
+    }
+
+    /// Point every deployed overlay at a new URL and reload it live.
+    func reload(url: URL) {
+        for intent in intents.values {
+            intent.url = url          // so a recreate-on-reconnect uses the new URL
+            intent.controller?.load(url)
+        }
     }
 
     /// A window closed. If its display is still present (and we hadn't already
@@ -208,6 +246,7 @@ final class WebWindowManager {
 
         // Genuine user close (Esc): hand control back to the coordinator.
         intents[uuid] = nil
+        publish()
         if intents.isEmpty {
             MainWindowCoordinator.shared.overlaysDidFinish()
         }

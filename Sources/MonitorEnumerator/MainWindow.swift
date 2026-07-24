@@ -12,6 +12,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.setContentSize(NSSize(width: 560, height: 500))
         window.contentMinSize = NSSize(width: 520, height: 420)
         window.center()
+        // Keep the window alive across close so it can be reopened from the menu.
+        window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
     }
@@ -19,11 +21,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    // Implicit last-window termination is disabled app-wide, so quit explicitly
-    // when the user closes the main window. (Hiding for an overlay uses orderOut,
-    // which does not fire this.)
-    func windowWillClose(_ notification: Notification) {
-        NSApp.terminate(nil)
+    // Closing the main window must not quit the app — it's a persistent agent.
+    // Hide it (and drop the Dock/menu-bar app) instead; reopen via Settings…,
+    // quit via the menu-bar Quit item.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        hideAndDetach()
+        return false
     }
 
     /// Show the window and make the app a regular foreground app (Dock icon + menu bar).
@@ -45,32 +48,28 @@ final class MainWindowCoordinator {
     static let shared = MainWindowCoordinator()
 
     var controller: MainWindowController?
-    /// True when the main window was shown then hidden for an overlay (UI click),
-    /// meaning we should bring it back once all overlays are gone. False when the
-    /// app was launched straight into an overlay via --monitor (nothing to return to).
-    private var restoreMainOnFinish = false
 
     private init() {}
 
-    /// User clicked a monitor: hide the main window and remember to restore it later.
+    /// Show the main window (menu-bar Settings, or after the last overlay closes).
+    func showMainWindow() {
+        controller?.show()
+    }
+
+    /// User clicked a monitor: hide the main window and drop the Dock/menu-bar app.
     func hideForOverlay() {
-        restoreMainOnFinish = true
         controller?.hideAndDetach()
     }
 
     /// Launched directly into an overlay via CLI: main window never appears.
     func suppressForCLI() {
-        restoreMainOnFinish = false
         NSApp.setActivationPolicy(.accessory)
     }
 
-    /// Called when the last overlay has been closed by the user.
+    /// The user closed (Esc'd) the last visible overlay — bring the main window
+    /// back so the app is never left invisible with no window. Quitting is done
+    /// explicitly via the menu-bar Quit item.
     func overlaysDidFinish() {
-        if restoreMainOnFinish {
-            restoreMainOnFinish = false
-            controller?.show()
-        } else {
-            NSApp.terminate(nil)
-        }
+        showMainWindow()
     }
 }

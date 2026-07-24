@@ -4,86 +4,69 @@ struct ContentView: View {
     @State private var monitors: [MonitorInfo] = MonitorInfo.all()
     @ObservedObject private var settings = OverlaySettings.shared
     @ObservedObject private var manager = WebWindowManager.shared
+    @State private var urlApplyWorkItem: DispatchWorkItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
+        // The whole page scrolls as one; credits stay pinned to the bottom when
+        // content is short, and scroll normally when it isn't.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
 
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                    .foregroundStyle(.secondary)
-                TextField("https://example.com", text: $settings.overlayURLString)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled(true)
-                    .onSubmit(applyURL)
-                Button("Apply", action: applyURL)
-                    .disabled(manager.overlayUUIDs.isEmpty)
-                    .help("Reload all deployed overlays with this URL")
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
-
-            HStack(spacing: 8) {
-                Image(systemName: "textformat.size")
-                    .foregroundStyle(.secondary)
-                Picker("Zoom", selection: $settings.webZoom) {
-                    ForEach(OverlaySettings.zoomLevels, id: \.self) { level in
-                        Text("\(Int(level * 100))%").tag(level)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .help("Page zoom applied inside the overlay web view")
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
-            .onChange(of: settings.webZoom) { newValue in
-                WebWindowManager.shared.applyZoom(newValue)
-            }
-
-            Toggle(isOn: $settings.autoRestoreOnReconnect) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Auto-restore on reconnect")
-                    Text(settings.autoRestoreOnReconnect
-                         ? "On disconnect the overlay hides, then reappears automatically when the monitor comes back."
-                         : "On disconnect the overlay hides and stays hidden until you reopen it.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.checkbox)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-
-            Divider()
-
-            if monitors.isEmpty {
-                Spacer()
-                Text("No monitors detected.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                Spacer()
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(monitors) { monitor in
-                            let deployed = manager.overlayUUIDs.contains(
-                                DisplayIdentity.uuid(for: monitor.id) ?? "")
-                            Button {
-                                if deployed {
-                                    WebWindowManager.shared.destroy(on: monitor)
-                                } else {
-                                    WebWindowManager.shared.open(on: monitor)
+                    if monitors.isEmpty {
+                        Text("No monitors detected.")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                    } else {
+                        LazyVStack(spacing: 12) {
+                            ForEach(monitors) { monitor in
+                                let deployed = manager.overlayUUIDs.contains(
+                                    DisplayIdentity.uuid(for: monitor.id) ?? "")
+                                Button {
+                                    if deployed {
+                                        WebWindowManager.shared.destroy(on: monitor)
+                                    } else {
+                                        WebWindowManager.shared.open(on: monitor)
+                                    }
+                                } label: {
+                                    MonitorRow(monitor: monitor, isDeployed: deployed)
                                 }
-                            } label: {
-                                MonitorRow(monitor: monitor, isDeployed: deployed)
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                     }
-                    .padding(16)
+
+                    optionsGroup
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+
+                    Spacer(minLength: 0)
+
+                    creditsGroup
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                 }
+                .frame(minHeight: proxy.size.height, alignment: .top)
+                .background(
+                    // Click on any empty area to dismiss text-field focus.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+                )
             }
+        }
+        .onChange(of: settings.webZoom) { newValue in
+            WebWindowManager.shared.applyZoom(newValue)
+        }
+        .onChange(of: settings.overlayURLString) { _ in
+            scheduleURLApply()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didChangeScreenParametersNotification)
@@ -93,7 +76,18 @@ struct ContentView: View {
     }
 
     private func applyURL() {
+        urlApplyWorkItem?.cancel()
         WebWindowManager.shared.reload(url: settings.overlayURL)
+    }
+
+    /// Debounce live URL edits so we reload deployed overlays only after typing settles.
+    private func scheduleURLApply() {
+        urlApplyWorkItem?.cancel()
+        let work = DispatchWorkItem {
+            WebWindowManager.shared.reload(url: settings.overlayURL)
+        }
+        urlApplyWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
     private var header: some View {
@@ -109,13 +103,76 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                monitors = MonitorInfo.all()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
         }
-        .padding(16)
+    }
+
+    private var optionsGroup: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 0) {
+                settingRow {
+                    Text("Web Page")
+                    // Push the field to the right, keeping it ~half the row width.
+                    Spacer(minLength: 0)
+                        .frame(maxWidth: .infinity)
+                    TextField("https://example.com", text: $settings.overlayURLString)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled(true)
+                        .onSubmit(applyURL)
+                        .frame(width: 280)
+                }
+
+                rowDivider
+
+                settingRow {
+                    Text("Scaling")
+                    Spacer()
+                    Picker("Scaling", selection: $settings.webZoom) {
+                        ForEach(OverlaySettings.zoomLevels, id: \.self) { level in
+                            Text("\(Int(level * 100))%").tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 280)
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.1))
+            )
+        }
+    }
+
+    /// One card row: label-left / control-right, native padding.
+    private func settingRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: 12) {
+            content()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    /// A divider inset on the leading edge (aligned to the label) but flush right,
+    /// matching macOS grouped-list separators.
+    private var rowDivider: some View {
+        Divider().padding(.leading, 16)
+    }
+
+    private var creditsGroup: some View {
+        Link(destination: URL(string: "https://github.com/arhelmus/macos-monitor-overlay")!) {
+            Text("Made with ♥ by @arhelmus · github.com/arhelmus/macos-monitor-overlay")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }
 
@@ -133,7 +190,6 @@ struct MonitorRow: View {
                 HStack(spacing: 6) {
                     Text(monitor.name)
                         .font(.title3.weight(.semibold))
-                    if monitor.isMain { badge("MAIN", tint: .accentColor) }
                     Spacer()
                     Text("ID \(String(monitor.id))")
                         .font(.caption.monospaced())
@@ -164,7 +220,7 @@ struct MonitorRow: View {
     private func badge(_ text: String, tint: Color) -> some View {
         Text(text)
             .font(.caption2.weight(.bold))
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(tint.opacity(0.2))
             .foregroundStyle(tint)
@@ -183,6 +239,5 @@ struct MonitorRow: View {
 }
 
 #Preview {
-    ContentView(
-    )
+    ContentView()
 }

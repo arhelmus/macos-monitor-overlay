@@ -33,17 +33,65 @@ enum Bootstrap {
         }
     }
 
-    /// Ensure only one instance runs. A second launch exits immediately (no window,
-    /// nothing happens). Uses an advisory file lock, which the OS releases
-    /// automatically if the holding process dies — so no stale-lock problem.
+    static let restartFlags = ["--restart", "--force-restart"]
+    private static let lockPath = NSTemporaryDirectory() + "monitor-overlay.lock"
+
+    /// Ensure only one instance runs. By default a second launch exits immediately
+    /// (nothing happens). With `--restart`, it instead terminates the running
+    /// instance and takes over. Uses an advisory file lock (auto-released if the
+    /// holder dies, so no stale-lock problem) whose contents hold the owner's PID.
     static func enforceSingleInstance() {
-        let lockPath = NSTemporaryDirectory() + "monitor-overlay.lock"
+        let forceRestart = CommandLine.arguments.contains { restartFlags.contains($0) }
+
         let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
         guard fd >= 0 else { return } // couldn't open — don't block startup
+
         if flock(fd, LOCK_EX | LOCK_NB) != 0 {
-            close(fd)
-            exit(0) // another instance already holds the lock
+            // Another instance holds the lock.
+            guard forceRestart else {
+                close(fd)
+                exit(0)
+            }
+            terminateRunningInstance()
+            guard waitForLock(fd) else {
+                close(fd) // couldn't take over in time — bail rather than run a second copy
+                exit(1)
+            }
         }
+
+        writeOwnerPID(to: fd)
         lockFileDescriptor = fd // intentionally kept open until the process exits
+    }
+
+    /// SIGTERM (then SIGKILL) the PID recorded in the lock file.
+    private static func terminateRunningInstance() {
+        guard let contents = try? String(contentsOfFile: lockPath, encoding: .utf8),
+              let pid = pid_t(contents.trimmingCharacters(in: .whitespacesAndNewlines)),
+              pid > 0 else { return }
+
+        kill(pid, SIGTERM)
+        for _ in 0..<20 { // wait up to ~2s for a clean exit
+            if kill(pid, 0) != 0 { return } // gone
+            usleep(100_000)
+        }
+        kill(pid, SIGKILL) // still alive — force it
+    }
+
+    /// Poll for the advisory lock to free up after the old instance dies.
+    private static func waitForLock(_ fd: Int32) -> Bool {
+        for _ in 0..<50 { // up to ~5s
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 { return true }
+            usleep(100_000)
+        }
+        return false
+    }
+
+    /// Record our PID in the lock file so a future `--restart` can find us.
+    private static func writeOwnerPID(to fd: Int32) {
+        ftruncate(fd, 0)
+        lseek(fd, 0, SEEK_SET)
+        let line = "\(getpid())\n"
+        _ = line.withCString { write(fd, $0, strlen($0)) }
+        fsync(fd)
     }
 }

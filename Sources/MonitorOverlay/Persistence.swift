@@ -6,7 +6,6 @@ enum Persistence {
     static let defaults: UserDefaults = UserDefaults(suiteName: "com.arhelmus.MonitorOverlay") ?? .standard
 
     enum Key {
-        static let autoRestore = "autoRestoreOnReconnect"
         static let overlayURL = "overlayURLString"
         static let desiredUUIDs = "deployedDisplayUUIDs"
         static let webZoom = "webZoom"

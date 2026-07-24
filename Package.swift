@@ -7,8 +7,9 @@ let package = Package(
         .macOS(.v13)
     ],
     products: [
-        // The executable (and thus the process / menu-bar / Dock name).
-        .executable(name: "Monitor Overlay", targets: ["MonitorOverlay"])
+        // Executable name → `swift run MonitorOverlay`. The nice spaced display
+        // name ("Monitor Overlay") is set at runtime for the menu bar / Dock.
+        .executable(name: "MonitorOverlay", targets: ["MonitorOverlay"])
     ],
     targets: [
         .executableTarget(

@@ -9,8 +9,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Monitor Overlay Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 560, height: 500))
-        window.contentMinSize = NSSize(width: 520, height: 420)
+        // Blank title bar — keep the bar and traffic lights, hide the title text.
+        window.titleVisibility = .hidden
+        window.setContentSize(NSSize(width: 500, height: 444))
+        window.contentMinSize = NSSize(width: 500, height: 444)
         // Float above everything — including the overlay, which sits at the
         // shielding level — so Settings is always reachable.
         window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1)
@@ -42,8 +44,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         NSApp.mainMenu?.items.first?.title = "Monitor Overlay"
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
             NSApp.applicationIconImage = AppIcon.dockImage()
+            // Don't leave the URL field auto-focused (and its text selected)
+            // every time the window appears — start with nothing focused.
+            self?.window?.makeFirstResponder(nil)
         }
     }
 

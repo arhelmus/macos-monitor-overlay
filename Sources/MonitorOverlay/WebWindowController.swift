@@ -26,12 +26,6 @@ final class OverlaySettings: ObservableObject {
 
     static let defaultURL = URL(string: "https://www.google.com")!
 
-    /// When true: a disconnect hides the overlay and it auto-restores on reconnect.
-    /// When false: a disconnect fully closes the overlay (no auto-restore).
-    @Published var autoRestoreOnReconnect: Bool {
-        didSet { Persistence.defaults.set(autoRestoreOnReconnect, forKey: Persistence.Key.autoRestore) }
-    }
-
     /// The address opened in new overlays (raw text as typed / passed on the CLI).
     @Published var overlayURLString: String {
         didSet { Persistence.defaults.set(overlayURLString, forKey: Persistence.Key.overlayURL) }
@@ -60,7 +54,6 @@ final class OverlaySettings: ObservableObject {
 
     private init() {
         let defaults = Persistence.defaults
-        autoRestoreOnReconnect = (defaults.object(forKey: Persistence.Key.autoRestore) as? Bool) ?? true
         overlayURLString = defaults.string(forKey: Persistence.Key.overlayURL)
             ?? OverlaySettings.defaultURL.absoluteString
         let savedZoom = defaults.object(forKey: Persistence.Key.webZoom) as? Double
@@ -173,7 +166,7 @@ private final class OverlayIntent {
     var controller: WebWindowController?
     /// Last known live display ID for this UUID (for fast removeFlag matching).
     var currentDisplayID: CGDirectDisplayID
-    /// True when the display is gone and we're waiting to auto-restore.
+    /// True when the display is gone and we're waiting to restore the overlay.
     var hidden: Bool = false
 
     init(uuid: String, url: URL, controller: WebWindowController, displayID: CGDirectDisplayID) {
@@ -364,11 +357,8 @@ final class WebWindowManager: ObservableObject {
         for intent in intents.values {
             if let screen = screensByUUID[intent.uuid] {
                 if intent.hidden {
-                    // Only auto-show again if the user opted into auto-restore;
-                    // otherwise leave it hidden until reopened manually.
-                    if OverlaySettings.shared.autoRestoreOnReconnect {
-                        reinstate(intent, on: screen)
-                    }
+                    // Its display is back — restore the overlay on it.
+                    reinstate(intent, on: screen)
                 } else {
                     // Resolution / arrangement may have changed — re-pin the frame.
                     intent.currentDisplayID = screen.displayID

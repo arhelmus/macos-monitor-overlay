@@ -3,8 +3,6 @@ import Foundation
 
 /// Parsed command-line options.
 struct CLIOptions {
-    /// nil = leave the default (checkbox) value untouched.
-    var autoRestore: Bool?
     /// Monitor to auto-open an overlay on at launch (nil = don't auto-open).
     var monitorSelector: String?
     /// Override the overlay URL (raw text; scheme normalized when used).
@@ -14,7 +12,7 @@ struct CLIOptions {
     static let helpText = """
     Monitor Overlay — list displays and open borderless web overlays on them.
 
-    Usage: Monitor Overlay [options]
+    Usage: MonitorOverlay [options]
 
     Options:
       -m, --monitor <selector>   Auto-open an overlay on a monitor at launch.
@@ -23,16 +21,15 @@ struct CLIOptions {
                                    main           the current main display
                                    id:<id>        a CGDirectDisplayID
                                    uuid:<uuid>    a stable display UUID
-          --auto-restore <val>   Auto-restore overlay when its monitor reconnects.
-                                 <val> is on|off|true|false|yes|no (default: on).
-          --no-auto-restore      Shorthand for --auto-restore off.
       -u, --url <url>            Overlay URL (default: https://www.google.com).
+          --restart              Terminate an already-running instance and take
+                                 over, instead of exiting (the default).
       -h, --help                 Show this help and exit.
 
     Examples:
-      Monitor Overlay --monitor 2 --no-auto-restore
-      Monitor Overlay -m main -u https://apple.com
-      Monitor Overlay --monitor uuid:37D8832A-2D66-02CA-B9F7-8F30A301B230
+      MonitorOverlay --monitor 2 --url apple.com
+      MonitorOverlay -m main -u https://apple.com
+      MonitorOverlay --monitor uuid:37D8832A-2D66-02CA-B9F7-8F30A301B230
     """
 
     static func parse(_ args: [String]) -> CLIOptions {
@@ -64,23 +61,13 @@ struct CLIOptions {
                 opts.monitorSelector = value(after: name, inline: inline)
             case "-u", "--url":
                 if let raw = value(after: name, inline: inline) { opts.urlString = raw }
-            case "--auto-restore":
-                if let raw = value(after: name, inline: inline) { opts.autoRestore = parseBool(raw) }
-            case "--no-auto-restore":
-                opts.autoRestore = false
+            case "--restart", "--force-restart":
+                break // handled in Bootstrap before the app launches
             default:
                 FileHandle.standardError.write(Data("Unknown option: \(token)\n".utf8))
             }
         }
         return opts
-    }
-
-    private static func parseBool(_ raw: String) -> Bool? {
-        switch raw.lowercased() {
-        case "on", "true", "yes", "1": return true
-        case "off", "false", "no", "0": return false
-        default: return nil
-        }
     }
 }
 

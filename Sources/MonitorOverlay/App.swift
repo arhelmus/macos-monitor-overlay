@@ -24,10 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(0)
         }
 
-        // Apply --auto-restore / --no-auto-restore before anything can disconnect.
-        if let autoRestore = options.autoRestore {
-            OverlaySettings.shared.autoRestoreOnReconnect = autoRestore
-        }
         // Seed the overlay URL (also prefills the main-window text field).
         if let urlString = options.urlString {
             OverlaySettings.shared.overlayURLString = urlString
